@@ -58,7 +58,7 @@ public class CategoryController {
     @ApiResponse(responseCode = "200", description = "Page of categories")
     public Page<CategoryResponse> list(@Parameter(hidden = true) @AuthenticationPrincipal AuthPrincipal principal,
             @RequestParam(required = false) CategoryType type, @ParameterObject Pageable pageable) {
-        Pageable bounded = PageableUtil.forController(pageable);
+        Pageable bounded = PageableUtil.bounded(pageable, PageableUtil.CATEGORY_SORT_FIELDS);
         Page<CategoryResponse> response;
         if (type == null) {
             response = categoryService.getCategories(principal.userId(), bounded);

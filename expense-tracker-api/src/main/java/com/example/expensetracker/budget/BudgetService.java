@@ -89,7 +89,7 @@ public class BudgetService {
         if (filter.categoryId() != null) {
             categoryService.requireOwnedCategory(userId, filter.categoryId());
         }
-        Pageable boundedPageable = PageableUtil.bounded(pageable);
+        Pageable boundedPageable = PageableUtil.bounded(pageable, PageableUtil.BUDGET_SORT_FIELDS);
         Page<Budget> budgets = budgetRepository.searchByUserId(userId, filter, boundedPageable);
         Page<BudgetResponse> responses = budgets.map(BudgetResponse::from);
         return responses;
@@ -103,7 +103,7 @@ public class BudgetService {
 
     public Page<BudgetAlert> getBudgetAlerts(@NotNull @Positive Long userId,
             @NotNull BudgetPeriod period, @NotNull Pageable pageable) {
-        Pageable boundedPageable = PageableUtil.bounded(pageable);
+        Pageable boundedPageable = PageableUtil.bounded(pageable, PageableUtil.BUDGET_SORT_FIELDS);
         Page<Budget> budgets = budgetRepository.searchByUserId(userId, BudgetFilter.forPeriod(period), boundedPageable);
         Map<Long, BigDecimal> spending = loadSpending(userId, budgets, period);
         Page<BudgetAlert> alerts = budgets.map(budget -> createAlert(budget, spending));

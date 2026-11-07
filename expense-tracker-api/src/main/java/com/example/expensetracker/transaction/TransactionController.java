@@ -55,7 +55,7 @@ public class TransactionController {
     @ApiResponse(responseCode = "200", description = "Page of transactions matching inclusive date/category/type filters")
     public Page<TransactionResponse> list(@Parameter(hidden = true) @AuthenticationPrincipal AuthPrincipal principal,
             @Valid @ModelAttribute @ParameterObject TransactionQueryRequest query, @ParameterObject Pageable pageable) {
-        Pageable bounded = PageableUtil.forController(pageable);
+        Pageable bounded = PageableUtil.bounded(pageable, PageableUtil.TRANSACTION_SORT_FIELDS);
         TransactionFilter filter = query.toFilter();
         Page<TransactionResponse> response = transactionService.getTransactions(principal.userId(), filter, bounded);
         return response;

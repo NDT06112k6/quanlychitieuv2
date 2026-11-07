@@ -138,7 +138,7 @@ class TransactionControllerTests extends ControllerTestSupport {
 
     @Test
     void rejectsUnapprovedSortAndMissingToken() throws Exception {
-        mockMvc.perform(get(ApiRoutes.TRANSACTIONS).header(HttpHeaders.AUTHORIZATION, authorization()).param("sort", "amount,desc"))
+        mockMvc.perform(get(ApiRoutes.TRANSACTIONS).header(HttpHeaders.AUTHORIZATION, authorization()).param("sort", "note,desc"))
                 .andExpect(status().isBadRequest());
         mockMvc.perform(get(ApiRoutes.TRANSACTIONS)).andExpect(status().isUnauthorized());
         verifyNoInteractions(transactionService);

@@ -36,6 +36,6 @@ class DomainValidationTests {
 
     @Test
     void rejectsUnboundedPagination() {
-        assertThatThrownBy(() -> PageableUtil.bounded(Pageable.unpaged())).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> PageableUtil.bounded(Pageable.unpaged(), PageableUtil.TRANSACTION_SORT_FIELDS)).isInstanceOf(IllegalArgumentException.class);
     }
 }

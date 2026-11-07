@@ -49,7 +49,7 @@ public class TransactionService {
         if (filter.categoryId() != null) {
             categoryService.requireOwnedCategory(userId, filter.categoryId());
         }
-        Pageable boundedPageable = PageableUtil.bounded(pageable);
+        Pageable boundedPageable = PageableUtil.bounded(pageable, PageableUtil.TRANSACTION_SORT_FIELDS);
         Page<Transaction> transactions = transactionRepository.searchByUserId(userId, filter, boundedPageable);
         Page<TransactionResponse> responses = transactions.map(TransactionResponse::from);
         return responses;

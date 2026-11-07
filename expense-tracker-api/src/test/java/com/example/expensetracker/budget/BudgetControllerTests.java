@@ -136,7 +136,7 @@ class BudgetControllerTests extends ControllerTestSupport {
 
     @Test
     void rejectsUnapprovedSortAndMissingToken() throws Exception {
-        mockMvc.perform(get(ApiRoutes.BUDGETS).header(HttpHeaders.AUTHORIZATION, authorization()).param("sort", "limitAmount,desc"))
+        mockMvc.perform(get(ApiRoutes.BUDGETS).header(HttpHeaders.AUTHORIZATION, authorization()).param("sort", "period,desc"))
                 .andExpect(status().isBadRequest());
         mockMvc.perform(get(ApiRoutes.BUDGETS)).andExpect(status().isUnauthorized());
         verifyNoInteractions(budgetService);

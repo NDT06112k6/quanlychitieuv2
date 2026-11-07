@@ -47,7 +47,7 @@ public class CategoryService {
     }
 
     public Page<CategoryResponse> getCategories(@NotNull @Positive Long userId, @NotNull Pageable pageable) {
-        Pageable boundedPageable = PageableUtil.bounded(pageable);
+        Pageable boundedPageable = PageableUtil.bounded(pageable, PageableUtil.CATEGORY_SORT_FIELDS);
         Page<Category> categories = categoryRepository.findAllByUserId(userId, boundedPageable);
         Page<CategoryResponse> responses = categories.map(CategoryResponse::from);
         return responses;
@@ -55,7 +55,7 @@ public class CategoryService {
 
     public Page<CategoryResponse> getCategoriesByType(@NotNull @Positive Long userId,
             @NotNull CategoryType type, @NotNull Pageable pageable) {
-        Pageable boundedPageable = PageableUtil.bounded(pageable);
+        Pageable boundedPageable = PageableUtil.bounded(pageable, PageableUtil.CATEGORY_SORT_FIELDS);
         Page<Category> categories = categoryRepository.findAllByUserIdAndType(userId, type, boundedPageable);
         Page<CategoryResponse> responses = categories.map(CategoryResponse::from);
         return responses;

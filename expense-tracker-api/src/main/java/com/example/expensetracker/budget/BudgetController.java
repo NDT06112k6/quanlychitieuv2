@@ -60,7 +60,7 @@ public class BudgetController {
     @ApiResponse(responseCode = "200", description = "Page of budgets matching category/period/type filters")
     public Page<BudgetResponse> list(@Parameter(hidden = true) @AuthenticationPrincipal AuthPrincipal principal,
             @Valid @ModelAttribute @ParameterObject BudgetQueryRequest query, @ParameterObject Pageable pageable) {
-        Pageable bounded = PageableUtil.forController(pageable);
+        Pageable bounded = PageableUtil.bounded(pageable, PageableUtil.BUDGET_SORT_FIELDS);
         BudgetFilter filter = query.toFilter();
         Page<BudgetResponse> response = budgetService.getBudgets(principal.userId(), filter, bounded);
         return response;
@@ -71,7 +71,7 @@ public class BudgetController {
     @ApiResponse(responseCode = "200", description = "Page of alerts for the required period and type")
     public Page<BudgetAlert> alerts(@Parameter(hidden = true) @AuthenticationPrincipal AuthPrincipal principal,
             @Valid @ModelAttribute @ParameterObject BudgetAlertQueryRequest query, @ParameterObject Pageable pageable) {
-        Pageable bounded = PageableUtil.forController(pageable);
+        Pageable bounded = PageableUtil.bounded(pageable, PageableUtil.BUDGET_SORT_FIELDS);
         BudgetPeriod period = query.toPeriod();
         Page<BudgetAlert> response = budgetService.getBudgetAlerts(principal.userId(), period, bounded);
         return response;

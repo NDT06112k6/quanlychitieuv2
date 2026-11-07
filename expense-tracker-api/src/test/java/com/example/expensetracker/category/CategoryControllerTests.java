@@ -116,7 +116,7 @@ class CategoryControllerTests extends ControllerTestSupport {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"unknown,desc", "user.passwordHash,desc", "id,asc"})
+    @ValueSource(strings = {"unknown,desc", "user.passwordHash,desc", "amount,desc"})
     void rejectsUnsupportedSortBeforeCallingService(String sort) throws Exception {
         mockMvc.perform(get(ApiRoutes.CATEGORIES).header(HttpHeaders.AUTHORIZATION, authorization()).param("sort", sort))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.status").value(400));

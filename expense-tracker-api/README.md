@@ -243,9 +243,13 @@ Budget filters use, for example, `type=MONTHLY&period=2026-11` or
 the period: `{"categoryId":10,"period":{"type":"MONTHLY","period":"2026-11"},"limitAmount":500.00}`.
 
 Pagination uses `page` (zero-based, default 0), `size` (default 20, capped at 100)
-and optional `sort=id,desc`. The existing service ordering remains descending ID.
-Other sort fields **and ascending ID sort** are rejected with 400 instead of
-silently changing or ignoring the requested ordering. Responses contain DTOs
+and optional `sort=field,asc` / `sort=field,desc` (repeat `sort` for multiple fields).
+The default remains `id,desc`. Allowed fields are `id,name` for categories,
+`id,occurredOn,amount` for transactions, and `id,limitAmount` for budgets and alerts.
+For example, `?sort=amount,asc&sort=occurredOn,desc`. When no ID sort is specified,
+`id,desc` is appended to break ties consistently across pages. Unlisted fields,
+nested properties and ignore-case options return 400. The whitelist is enforced
+by the shared pagination utility in both controllers and services. Responses contain DTOs
 under `content`, with page metadata including `size`, `number` and `totalElements`.
 
 ### Swagger UI
