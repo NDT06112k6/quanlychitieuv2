@@ -123,8 +123,8 @@ principal rather than a client-supplied owner ID.
 All money uses `BigDecimal` with exact two-decimal storage; values requiring
 rounding, non-positive amounts and values exceeding `DECIMAL(15,2)` are rejected.
 All list services require `Pageable`, cap pages at 100 rows and sort by descending
-ID for stable paging. Unpaged requests are rejected. Business HTTP endpoints
-will be added separately; the authentication endpoints are described below.
+ID for stable paging. Unpaged requests are rejected. HTTP endpoints are listed
+below, together with the supported filters and pagination contract.
 
 Transaction/budget list and detail queries use
 `@EntityGraph(attributePaths = {"category", "user"})`. Category queries fetch
@@ -194,3 +194,119 @@ and [Spring Security's JWT sample](https://github.com/spring-projects/spring-sec
 JJWT supplies signing/verification with the already installed dependency;
 `SessionCreationPolicy.STATELESS` supplies session-free request authentication.
 No dependencies were added in this phase.
+
+## REST endpoints (phase 4)
+
+All routes below require `Authorization: Bearer <accessToken>`. The owner ID
+always comes from `@AuthenticationPrincipal AuthPrincipal`; no path, query or
+request DTO accepts an owner ID. IDs in resource paths identify the resource,
+and the service checks that it belongs to the authenticated user.
+
+| Method | Path | Request / query | Success |
+| --- | --- | --- | --- |
+| GET | `/api/v1/users/me` | Current principal | 200 profile |
+| PUT | `/api/v1/users/me` | `displayName` | 200 profile |
+| PUT | `/api/v1/users/me/password` | `currentPassword`, `newPassword` | 200, empty body |
+| POST | `/api/v1/categories` | `name`, `type` (`CHI` / `THU`) | 201 + Location |
+| GET | `/api/v1/categories` | Pagination; optional `type` | 200 page |
+| GET | `/api/v1/categories/{id}` | Resource ID | 200 category |
+| PUT | `/api/v1/categories/{id}` | `name` only (`CategoryRenameRequest`) | 200 category |
+| DELETE | `/api/v1/categories/{id}` | Resource ID | 204 |
+| POST | `/api/v1/transactions` | `categoryId`, `amount`, `occurredOn`, optional `note` | 201 + Location |
+| GET | `/api/v1/transactions` | Pagination; optional `startDate`, `endDate`, `categoryId`, `type` | 200 page |
+| GET | `/api/v1/transactions/{id}` | Resource ID | 200 transaction |
+| PUT | `/api/v1/transactions/{id}` | Same fields as transaction creation | 200 transaction |
+| DELETE | `/api/v1/transactions/{id}` | Resource ID | 204 |
+| GET | `/api/v1/transactions/dashboard` | Optional `startDate`, `endDate` | 200 totals |
+| POST | `/api/v1/budgets` | `categoryId`, `period`, `limitAmount` | 201 + Location |
+| GET | `/api/v1/budgets` | Pagination; optional `categoryId`, `type`, `period` | 200 page |
+| GET | `/api/v1/budgets/{id}` | Resource ID | 200 budget |
+| PUT | `/api/v1/budgets/{id}` | `limitAmount` only (`BudgetLimitRequest`) | 200 budget |
+| DELETE | `/api/v1/budgets/{id}` | Resource ID | 204 |
+| GET | `/api/v1/budgets/alerts` | Required `type`, `period`; pagination | 200 page of alerts |
+
+Creation returns the DTO and a relative Location such as `/api/v1/categories/10`.
+Category type is immutable. Budget updates cannot change category, period or type.
+Creating a duplicate budget returns 409, and deleting a category referenced by
+transactions or budgets returns 409. Missing/foreign owned resources both return
+403 through `AccessGuard`. Invalid bodies, dates, enum values, IDs and sort
+fields return the shared JSON 400 response; missing/invalid tokens return 401.
+
+Dates use `YYYY-MM-DD`, and range bounds are inclusive. An omitted start/end
+includes all supported earlier/later dates (1000-01-01 through 9999-12-31).
+Budget filters use, for example, `type=MONTHLY&period=2026-11` or
+`type=WEEKLY&period=2026-W45`; `period` requires `type`. The creation body nests
+the period: `{"categoryId":10,"period":{"type":"MONTHLY","period":"2026-11"},"limitAmount":500.00}`.
+
+Pagination uses `page` (zero-based, default 0), `size` (default 20, capped at 100)
+and optional `sort=id,desc`. The existing service ordering remains descending ID.
+Other sort fields **and ascending ID sort** are rejected with 400 instead of
+silently changing or ignoring the requested ordering. Responses contain DTOs
+under `content`, with page metadata including `size`, `number` and `totalElements`.
+
+### Swagger UI
+
+Open `http://localhost:8080/swagger-ui.html` (redirects to the Swagger UI).
+Run register or login under **Authentication**, copy `accessToken`, then click
+**Authorize** and paste the token **without** the `Bearer ` prefix. Swagger adds
+the prefix through the HTTP Bearer security scheme. Register/login have no Bearer
+requirement. `/v3/api-docs` publishes the OpenAPI document, including query filters,
+request DTOs and the common error schema. Principal/userId is hidden from inputs.
+
+### PowerShell curl example
+
+Use `curl.exe` rather than the Windows PowerShell `curl` alias. Set
+`DEMO_PASSWORD` in the current shell to your own password (at least 8 characters).
+Temporary UTF-8 JSON files preserve quotes and Unicode on Windows PowerShell;
+the last command deletes those payloads, which contain the demo credentials.
+
+```powershell
+$baseUrl = 'http://localhost:8080'
+$demoEmail = 'demo@example.invalid'
+
+function Write-JsonTemp($value) {
+    $file = [System.IO.Path]::GetTempFileName()
+    $encoding = [System.Text.UTF8Encoding]::new($false)
+    [System.IO.File]::WriteAllText($file, ($value | ConvertTo-Json -Compress -Depth 5), $encoding)
+    return $file
+}
+
+$registrationFile = Write-JsonTemp @{
+    email = $demoEmail
+    password = $env:DEMO_PASSWORD
+    displayName = 'Demo'
+}
+curl.exe -sS -X POST "$baseUrl/api/v1/auth/register" `
+    -H 'Content-Type: application/json' --data-binary "@$registrationFile" | Out-Null
+
+$loginFile = Write-JsonTemp @{
+    email = $demoEmail
+    password = $env:DEMO_PASSWORD
+}
+$auth = curl.exe -sS -X POST "$baseUrl/api/v1/auth/login" `
+    -H 'Content-Type: application/json' --data-binary "@$loginFile" | ConvertFrom-Json
+$authorization = "Authorization: Bearer $($auth.accessToken)"
+
+$categoryFile = Write-JsonTemp @{
+    name = 'Food'
+    type = 'CHI'
+}
+$category = curl.exe -sS -X POST "$baseUrl/api/v1/categories" `
+    -H $authorization -H 'Content-Type: application/json' --data-binary "@$categoryFile" | ConvertFrom-Json
+
+$transactionFile = Write-JsonTemp @{
+    categoryId = $category.id
+    amount = [decimal]'12.34'
+    occurredOn = '2026-11-08'
+    note = 'Lunch'
+}
+curl.exe -i -X POST "$baseUrl/api/v1/transactions" `
+    -H $authorization -H 'Content-Type: application/json' --data-binary "@$transactionFile"
+
+curl.exe -i --get "$baseUrl/api/v1/transactions/dashboard" -H $authorization `
+    --data-urlencode 'startDate=2026-11-01' --data-urlencode 'endDate=2026-11-30'
+curl.exe -i --get "$baseUrl/api/v1/transactions" -H $authorization `
+    --data-urlencode 'size=1000' --data-urlencode 'sort=id,desc'
+
+Remove-Item -LiteralPath $registrationFile, $loginFile, $categoryFile, $transactionFile
+```
