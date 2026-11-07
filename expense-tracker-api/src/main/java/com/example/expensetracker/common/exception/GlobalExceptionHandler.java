@@ -34,6 +34,8 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 @Slf4j
 public class GlobalExceptionHandler {
 
+    private static final String TRANSACTION_CATEGORY_CONSTRAINT = "fk_transactions_category";
+    private static final String BUDGET_CATEGORY_CONSTRAINT = "fk_budgets_category";
     @ExceptionHandler({MethodArgumentNotValidException.class, BindException.class})
     public ResponseEntity<ApiErrorResponse> handleValidation(BindException exception,
             HttpServletRequest request) {
@@ -96,8 +98,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiErrorResponse> handleIntegrityError(DataIntegrityViolationException exception,
             HttpServletRequest request) {
-        if (ConstraintViolationUtil.matches(exception, "fk_transactions_category")
-                || ConstraintViolationUtil.matches(exception, "fk_budgets_category")) {
+        if (ConstraintViolationUtil.matches(exception, TRANSACTION_CATEGORY_CONSTRAINT)
+                || ConstraintViolationUtil.matches(exception, BUDGET_CATEGORY_CONSTRAINT)) {
             ResponseEntity<ApiErrorResponse> response = respond(HttpStatus.CONFLICT, ErrorMessages.RESOURCE_IN_USE, request);
             return response;
         }
