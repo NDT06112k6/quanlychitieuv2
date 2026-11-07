@@ -1,8 +1,8 @@
 # Quy tắc dự án Expense Tracker API (Dành cho AI Agent)
 
 ## 1. Bối cảnh và điểm vào (Context & Entry Points)
-- Dự án này là một ứng dụng Web Spring Boot tên là **Expense Tracker** (Quản lý chi tiêu cá nhân).
-- Công nghệ: Java 25, Spring Boot 4.1.x, Thymeleaf, MySQL 8.0.
+- Dự án này là **Expense Tracker** (Quản lý chi tiêu cá nhân), REST API stateless xác thực bằng JWT.
+- Công nghệ: Java 25, Spring Boot 4.1.x, MySQL 8.0, JWT và Swagger (springdoc).
 - File khởi chạy chính (Entry point): `src/main/java/com/example/expensetracker/ExpenseTrackerApplication.java`.
 - File cấu hình cốt lõi: `src/main/resources/application.properties` (chứa cấu hình DB, JPA, Flyway).
 - Các file chứa logic cốt lõi:
@@ -11,8 +11,8 @@
 - Mọi thay đổi về nghiệp vụ hay cơ sở dữ liệu phải bắt đầu từ việc đọc hiểu các file trên.
 
 ## 2. Stack & Kiến trúc (Bắt buộc)
-- **Stack:** Java 25, Spring Boot 4.1.x, Maven, MySQL 8.0, Flyway.
-- **Dependencies cốt lõi:** WebMVC, Thymeleaf, Security, JPA, Validation, Flyway, MySQL, DevTools. Không tự ý thêm thư viện khác nếu chưa hỏi.
+- **Stack:** Java 25, Spring Boot 4.1.x, Maven, MySQL 8.0, Flyway; REST API stateless xác thực bằng JWT, tài liệu Swagger (springdoc).
+- **Dependencies cốt lõi:** WebMVC, Security, JPA, Validation, Flyway, MySQL, Lombok, JJWT, springdoc. Không tự ý thêm thư viện khác nếu chưa hỏi.
 - **Kiến trúc:** Chia package theo feature (user, category, transaction, budget). Controller chỉ nhận/trả DTO, logic ở Service, truy vấn ở Repository. Không trả Entity ra API.
 - **Khởi tạo:** Luôn dùng Constructor Injection. Không dùng Field Injection (`@Autowired` trên biến).
 
