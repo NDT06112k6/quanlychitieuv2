@@ -6,7 +6,6 @@ import com.example.expensetracker.common.web.ApiRoutes;
 import com.example.expensetracker.support.ControllerTestSupport;
 import com.example.expensetracker.support.DomainFixtures;
 import com.example.expensetracker.support.RestControllerTest;
-import java.math.BigDecimal;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;

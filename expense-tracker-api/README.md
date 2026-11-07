@@ -88,6 +88,10 @@ Service tests use Mockito without a Spring context. The suite also checks startu
 exact money storage, ownership foreign keys, budget uniqueness/types and
 JWT validation, auth HTTP responses and protected/public access rules.
 H2 does not replace validation against MySQL for future database-specific changes.
+`OwnershipIsolationIntegrationTests` exercises registration/login and real HTTP
+controller calls over H2, including category/transaction/budget creation,
+Dashboard/alerts, rejected cross-user reads/updates/deletes, and profile/password
+isolation. It also checks that owned resources can still be updated and deleted.
 
 ## Domain and persistence (phase 2)
 
