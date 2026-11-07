@@ -113,8 +113,10 @@ principal rather than a client-supplied owner ID.
   stable. Referenced categories cannot be deleted because of the database FKs.
 - `TransactionService`: owner-scoped creation/read/update/delete, filtering by
   category/type/inclusive date range, and Dashboard income/expense/balance totals.
-- `BudgetService`: serialized upsert of expense budgets by category, period and
-  type, paged lookup/filtering/deletion, and paged budget alerts. Monthly periods
+- `BudgetService`: serialized creation of expense budgets by category, period and
+  type, limit-only updates, paged lookup/filtering/deletion, and paged budget alerts.
+  Duplicate creation fails with 409; updates require an existing owned budget ID.
+  Category, period and type cannot change during an update. Monthly periods
   use `YYYY-MM`; weekly periods use ISO week-based years (`YYYY-Www`, Monday to
   Sunday), including weeks spanning calendar years. Invalid week 53 is rejected.
 

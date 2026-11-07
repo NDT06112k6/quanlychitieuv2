@@ -3,6 +3,7 @@ package com.example.expensetracker.budget;
 import com.example.expensetracker.category.Category;
 import com.example.expensetracker.category.CategoryService;
 import com.example.expensetracker.common.util.AccessGuard;
+import com.example.expensetracker.common.util.ConstraintViolationUtil;
 import com.example.expensetracker.common.util.DomainValidation;
 import com.example.expensetracker.common.util.PageableUtil;
 import com.example.expensetracker.transaction.CategorySpending;
@@ -15,11 +16,11 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.annotation.Validated;
@@ -31,28 +32,50 @@ import org.springframework.validation.annotation.Validated;
 @Transactional(readOnly = true)
 public class BudgetService {
 
+    private static final String UNIQUE_BUDGET_CONSTRAINT = "uk_budgets_user_category_period_type";
     private final BudgetRepository budgetRepository;
     private final CategoryService categoryService;
     private final TransactionRepository transactionRepository;
 
     @Transactional
-    public BudgetResponse setBudget(@NotNull @Positive Long userId, @Valid @NotNull BudgetRequest request) {
-        // Serialize upserts per category so concurrent requests cannot create duplicate budgets.
+    public BudgetResponse createBudget(@NotNull @Positive Long userId, @Valid @NotNull BudgetRequest request) {
+        // Serialize creation per category; the database also guards against concurrent alternate writers.
         Category category = categoryService.requireExpenseCategoryForUpdate(userId, request.categoryId());
         BudgetRepository.BudgetKey key = new BudgetRepository.BudgetKey(category.getId(), request.period());
-        Optional<Budget> existing = budgetRepository.findByUserIdAndKey(userId, key);
-        BudgetResponse response;
-        if (existing.isPresent()) {
-            Budget budget = existing.get();
-            int affectedRows = budgetRepository.updateOwnedLimit(userId, budget.getId(), request.limitAmount());
-            AccessGuard.requireSuccessfulWrite(affectedRows);
-            response = getBudget(userId, budget.getId());
-        } else {
-            Budget budget = new Budget(category.getUser(), category, request);
-            Budget saved = budgetRepository.save(budget);
-            response = BudgetResponse.from(saved);
+        if (budgetRepository.findByUserIdAndKey(userId, key).isPresent()) {
+            throw duplicateBudget();
         }
+        Budget budget = new Budget(category.getUser(), category, request);
+        Budget saved = saveNewBudget(budget);
+        BudgetResponse response = BudgetResponse.from(saved);
         return response;
+    }
+
+    @Transactional
+    public BudgetResponse updateBudgetLimit(@NotNull @Positive Long userId, @NotNull @Positive Long budgetId,
+            @Valid @NotNull BudgetLimitRequest request) {
+        int affectedRows = budgetRepository.updateOwnedLimit(userId, budgetId, request.limitAmount());
+        AccessGuard.requireSuccessfulWrite(affectedRows);
+        BudgetResponse response = getBudget(userId, budgetId);
+        return response;
+    }
+
+    private Budget saveNewBudget(Budget budget) {
+        try {
+            Budget saved = budgetRepository.saveAndFlush(budget);
+            return saved;
+        } catch (DataIntegrityViolationException exception) {
+            if (ConstraintViolationUtil.matches(exception, UNIQUE_BUDGET_CONSTRAINT)) {
+                throw duplicateBudget();
+            }
+            throw exception;
+        }
+    }
+
+    private DuplicateBudgetException duplicateBudget() {
+        log.warn("Budget creation rejected because the category and period already have a budget.");
+        DuplicateBudgetException exception = new DuplicateBudgetException();
+        return exception;
     }
 
     public BudgetResponse getBudget(@NotNull @Positive Long userId, @NotNull @Positive Long budgetId) {

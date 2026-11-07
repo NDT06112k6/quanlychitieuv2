@@ -1,14 +1,13 @@
 package com.example.expensetracker.auth;
 
 import com.example.expensetracker.common.exception.ErrorMessages;
+import com.example.expensetracker.common.util.ConstraintViolationUtil;
 import com.example.expensetracker.user.User;
 import com.example.expensetracker.user.UserRepository;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
-import java.util.Locale;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
-import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -69,25 +68,11 @@ public class AuthService {
             User saved = userRepository.saveAndFlush(user);
             return saved;
         } catch (DataIntegrityViolationException exception) {
-            if (isDuplicateEmail(exception)) {
+            if (ConstraintViolationUtil.matches(exception, EMAIL_UNIQUE_CONSTRAINT)) {
                 throw duplicateEmail();
             }
             throw exception;
         }
-    }
-
-    private boolean isDuplicateEmail(Throwable exception) {
-        Throwable cause = exception;
-        while (cause != null) {
-            if (cause instanceof ConstraintViolationException violation && violation.getConstraintName() != null) {
-                String constraintName = violation.getConstraintName().toLowerCase(Locale.ROOT);
-                if (constraintName.contains(EMAIL_UNIQUE_CONSTRAINT)) {
-                    return true;
-                }
-            }
-            cause = cause.getCause();
-        }
-        return false;
     }
 
     private EmailAlreadyExistsException duplicateEmail() {

@@ -18,6 +18,10 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import java.sql.SQLException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static com.example.expensetracker.support.DomainFixtures.AMOUNT;
@@ -52,27 +56,24 @@ class BudgetServiceTests {
         when(categoryService.requireExpenseCategoryForUpdate(USER_ID, CATEGORY_ID)).thenReturn(DomainFixtures.category());
         when(budgetRepository.findByUserIdAndKey(USER_ID, new BudgetRepository.BudgetKey(CATEGORY_ID, PERIOD)))
                 .thenReturn(Optional.empty());
-        when(budgetRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(budgetRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        BudgetResponse response = budgetService.setBudget(USER_ID, new BudgetRequest(CATEGORY_ID, PERIOD, AMOUNT));
+        BudgetResponse response = budgetService.createBudget(USER_ID, new BudgetRequest(CATEGORY_ID, PERIOD, AMOUNT));
 
         assertThat(response.limitAmount()).isEqualByComparingTo(AMOUNT);
         verify(categoryService).requireExpenseCategoryForUpdate(USER_ID, CATEGORY_ID);
     }
 
     @Test
-    void updatesExistingBudgetWithoutInsertingDuplicate() {
+    void rejectsDuplicateCreationWithoutUpdatingTheExistingBudget() {
         Budget budget = DomainFixtures.budget(PERIOD);
         when(categoryService.requireExpenseCategoryForUpdate(USER_ID, CATEGORY_ID)).thenReturn(budget.getCategory());
         when(budgetRepository.findByUserIdAndKey(USER_ID, new BudgetRepository.BudgetKey(CATEGORY_ID, PERIOD)))
                 .thenReturn(Optional.of(budget));
-        when(budgetRepository.updateOwnedLimit(USER_ID, RESOURCE_ID, AMOUNT)).thenReturn(1);
-        when(budgetRepository.findByIdAndUserId(RESOURCE_ID, USER_ID)).thenReturn(Optional.of(budget));
-
-        budgetService.setBudget(USER_ID, new BudgetRequest(CATEGORY_ID, PERIOD, AMOUNT));
-
-        verify(budgetRepository).updateOwnedLimit(USER_ID, RESOURCE_ID, AMOUNT);
-        verify(budgetRepository, never()).save(any());
+        assertThatThrownBy(() -> budgetService.createBudget(USER_ID, new BudgetRequest(CATEGORY_ID, PERIOD, AMOUNT)))
+                .isInstanceOf(DuplicateBudgetException.class);
+        verify(budgetRepository, never()).updateOwnedLimit(any(), any(), any());
+        verify(budgetRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -80,9 +81,60 @@ class BudgetServiceTests {
         when(categoryService.requireExpenseCategoryForUpdate(OTHER_USER_ID, CATEGORY_ID))
                 .thenThrow(new AccessDeniedException("Denied"));
 
-        assertThatThrownBy(() -> budgetService.setBudget(OTHER_USER_ID, new BudgetRequest(CATEGORY_ID, PERIOD, AMOUNT)))
+        assertThatThrownBy(() -> budgetService.createBudget(OTHER_USER_ID, new BudgetRequest(CATEGORY_ID, PERIOD, AMOUNT)))
                 .isInstanceOf(AccessDeniedException.class);
-        verify(budgetRepository, never()).save(any());
+        verify(budgetRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void updatesOnlyTheOwnedBudgetLimit() {
+        Budget budget = DomainFixtures.budget(PERIOD);
+        when(budgetRepository.updateOwnedLimit(USER_ID, RESOURCE_ID, AMOUNT)).thenReturn(1);
+        when(budgetRepository.findByIdAndUserId(RESOURCE_ID, USER_ID)).thenReturn(Optional.of(budget));
+
+        BudgetResponse response = budgetService.updateBudgetLimit(USER_ID, RESOURCE_ID, new BudgetLimitRequest(AMOUNT));
+
+        assertThat(response.period()).isEqualTo(PERIOD);
+        assertThat(response.categoryId()).isEqualTo(CATEGORY_ID);
+        assertThat(response.limitAmount()).isEqualByComparingTo(AMOUNT);
+        verify(budgetRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void rejectsUpdatingForeignOrMissingBudget() {
+        when(budgetRepository.updateOwnedLimit(OTHER_USER_ID, RESOURCE_ID, AMOUNT)).thenReturn(0);
+
+        assertThatThrownBy(() -> budgetService.updateBudgetLimit(OTHER_USER_ID, RESOURCE_ID, new BudgetLimitRequest(AMOUNT)))
+                .isInstanceOf(AccessDeniedException.class);
+        verify(budgetRepository, never()).findByIdAndUserId(any(), any());
+    }
+
+    @Test
+    void translatesDatabaseUniquenessConflictWithoutHidingOtherFailures() {
+        when(categoryService.requireExpenseCategoryForUpdate(USER_ID, CATEGORY_ID)).thenReturn(DomainFixtures.category());
+        org.hibernate.exception.ConstraintViolationException conflict = new org.hibernate.exception.ConstraintViolationException(
+                "Duplicate", new SQLException("Duplicate", "23000", 1062), "uk_budgets_user_category_period_type");
+        when(budgetRepository.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("Duplicate", conflict));
+
+        assertThatThrownBy(() -> budgetService.createBudget(USER_ID, new BudgetRequest(CATEGORY_ID, PERIOD, AMOUNT)))
+                .isInstanceOf(DuplicateBudgetException.class);
+    }
+
+    @Test
+    void propagatesUnrelatedDatabaseFailure() {
+        when(categoryService.requireExpenseCategoryForUpdate(USER_ID, CATEGORY_ID)).thenReturn(DomainFixtures.category());
+        DataIntegrityViolationException failure = new DataIntegrityViolationException("Other constraint");
+        when(budgetRepository.saveAndFlush(any())).thenThrow(failure);
+
+        assertThatThrownBy(() -> budgetService.createBudget(USER_ID, new BudgetRequest(CATEGORY_ID, PERIOD, AMOUNT)))
+                .isSameAs(failure);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"0", "-1.00", "0.001", "10000000000000.00"})
+    void rejectsLimitsThatCannotBeStoredExactly(String value) {
+        assertThatThrownBy(() -> new BudgetLimitRequest(new BigDecimal(value)))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

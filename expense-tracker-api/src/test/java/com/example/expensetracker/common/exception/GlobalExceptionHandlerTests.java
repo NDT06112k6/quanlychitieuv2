@@ -1,6 +1,7 @@
 package com.example.expensetracker.common.exception;
 
 import com.example.expensetracker.auth.JwtService;
+import com.example.expensetracker.budget.DuplicateBudgetException;
 import com.example.expensetracker.config.SecurityConfig;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Validator;
@@ -39,6 +40,7 @@ class GlobalExceptionHandlerTests {
     private static final String CONSTRAINTS = "/test/errors/constraints";
     private static final String DENIED = "/test/errors/denied";
     private static final String UNEXPECTED = "/test/errors/unexpected";
+    private static final String DUPLICATE_BUDGET = "/test/errors/duplicate-budget";
     private final MockMvc mockMvc;
 
     @Autowired
@@ -63,6 +65,15 @@ class GlobalExceptionHandlerTests {
     }
 
     @Test
+    void mapsDuplicateBudgetToUniform409() throws Exception {
+        mockMvc.perform(get(DUPLICATE_BUDGET))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.message").value(ErrorMessages.DUPLICATE_BUDGET))
+                .andExpect(jsonPath("$.path").value(DUPLICATE_BUDGET));
+    }
+
+    @Test
     void hidesInternalDetailsInResponseAndLogsWhileKeepingStackTrace(CapturedOutput output) throws Exception {
         mockMvc.perform(get(UNEXPECTED))
                 .andExpect(status().isInternalServerError())
@@ -82,6 +93,11 @@ class GlobalExceptionHandlerTests {
     static class TestEndpoints {
 
         private final Validator validator;
+
+        @GetMapping(DUPLICATE_BUDGET)
+        public String duplicateBudget() {
+            throw new DuplicateBudgetException();
+        }
 
         @GetMapping(CONSTRAINTS)
         public String constraints() {

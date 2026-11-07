@@ -12,7 +12,7 @@ import org.springframework.data.repository.query.Param;
 
 public interface BudgetRepository extends Repository<Budget, Long> {
 
-    Budget save(Budget budget);
+    Budget saveAndFlush(Budget budget);
 
     @EntityGraph(attributePaths = {"category", "user"})
     Optional<Budget> findByIdAndUserId(Long id, Long userId);

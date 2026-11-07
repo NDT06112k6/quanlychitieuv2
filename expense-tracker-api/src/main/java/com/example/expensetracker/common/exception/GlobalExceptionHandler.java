@@ -1,6 +1,7 @@
 package com.example.expensetracker.common.exception;
 
 import com.example.expensetracker.auth.EmailAlreadyExistsException;
+import com.example.expensetracker.budget.DuplicateBudgetException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
@@ -70,6 +71,13 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiErrorResponse> handleInvalidCredentials(BadCredentialsException exception,
             HttpServletRequest request) {
         ResponseEntity<ApiErrorResponse> response = respond(HttpStatus.UNAUTHORIZED, ErrorMessages.INVALID_CREDENTIALS, request);
+        return response;
+    }
+
+    @ExceptionHandler(DuplicateBudgetException.class)
+    public ResponseEntity<ApiErrorResponse> handleDuplicateBudget(DuplicateBudgetException exception,
+            HttpServletRequest request) {
+        ResponseEntity<ApiErrorResponse> response = respond(HttpStatus.CONFLICT, ErrorMessages.DUPLICATE_BUDGET, request);
         return response;
     }
 
