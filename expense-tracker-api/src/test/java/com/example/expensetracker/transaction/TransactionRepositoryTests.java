@@ -1,5 +1,7 @@
 package com.example.expensetracker.transaction;
 
+import com.example.expensetracker.budget.BudgetPeriod;
+import com.example.expensetracker.budget.BudgetType;
 import com.example.expensetracker.category.Category;
 import com.example.expensetracker.category.CategoryType;
 import com.example.expensetracker.common.util.DateRange;
@@ -13,6 +15,8 @@ import java.util.List;
 import org.hibernate.Hibernate;
 import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -97,6 +101,26 @@ class TransactionRepositoryTests extends PersistenceFixtures {
         BigDecimal total = transactionRepository.sumByUserId(owner.getId(), TransactionFilter.all());
 
         assertThat(total).isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"WEEKLY,2020-W53", "MONTHLY,2024-02"})
+    void includesBothBudgetPeriodBoundariesAndExcludesAdjacentDates(BudgetType type, String periodValue) {
+        BudgetPeriod period = new BudgetPeriod(type, periodValue);
+        User owner = persistUser("budget-boundary@example.invalid");
+        Category category = persistCategory(owner, CategoryType.CHI);
+        persistTransaction(category, new BigDecimal("1.25"), period.startDate());
+        persistTransaction(category, new BigDecimal("2.75"), period.endDate());
+        persistTransaction(category, new BigDecimal("100.00"), period.startDate().minusDays(1));
+        persistTransaction(category, new BigDecimal("100.00"), period.endDate().plusDays(1));
+        resetStatistics();
+
+        List<CategorySpending> totals = transactionRepository.sumExpensesByCategory(
+                owner.getId(), List.of(category.getId()), period.dateRange());
+
+        assertThat(totals).hasSize(1);
+        assertThat(totals.getFirst().categoryId()).isEqualTo(category.getId());
+        assertThat(totals.getFirst().totalExpense()).isEqualByComparingTo("4.00");
     }
 
     @Test

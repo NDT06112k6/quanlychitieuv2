@@ -72,6 +72,18 @@ class SecurityConfigTests {
                 .andExpect(status().isUnauthorized());
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"", "Basic ", "Bearer", "Bearer\t", " Bearer "})
+    void rejectsMalformedAuthorizationSchemeEvenWithAValidToken(String prefix) throws Exception {
+        String token = jwtService.createToken(JwtTestFixtures.PRINCIPAL);
+        String authorization = prefix + token;
+
+        mockMvc.perform(get(PROTECTED).header(HttpHeaders.AUTHORIZATION, authorization))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.status").value(401))
+                .andExpect(jsonPath("$.message").value(ErrorMessages.AUTHENTICATION_REQUIRED));
+    }
+
     @Test
     void acceptsVerifiedTokenAndExposesUserIdWithoutCreatingSession() throws Exception {
         String token = jwtService.createToken(JwtTestFixtures.PRINCIPAL);

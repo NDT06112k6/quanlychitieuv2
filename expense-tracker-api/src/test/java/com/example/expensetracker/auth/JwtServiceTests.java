@@ -94,6 +94,17 @@ class JwtServiceTests {
     }
 
     @Test
+    void rejectsSignedTokenWithoutRole() {
+        String token = Jwts.builder()
+                .subject(JwtTestFixtures.PRINCIPAL.userId().toString())
+                .expiration(Date.from(NOW.plusSeconds(JwtTestFixtures.EXPIRATION_SECONDS)))
+                .signWith(JwtTestFixtures.properties().signingKey(), Jwts.SIG.HS256)
+                .compact();
+
+        assertThatThrownBy(() -> jwtService.validateToken(token)).isInstanceOf(JwtException.class);
+    }
+
+    @Test
     void rejectsSignedTokenWithInvalidIdentity() {
         when(clock.instant()).thenReturn(NOW);
         String token = Jwts.builder().subject("not-a-user-id").claim(AuthConstants.ROLE_CLAIM, "USER")
