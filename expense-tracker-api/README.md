@@ -3,6 +3,16 @@
 Stateless REST API using Java 25, Spring Boot 4.1.2, Maven, Spring Security,
 JJWT, JPA, Flyway, MySQL 8.0 and Swagger (springdoc).
 
+## Architecture
+
+Packages follow features: `auth`, `user`, `category`, `transaction`, `budget`.
+Requests pass through JWT verification, then DTO-only controllers, transactional
+services, owner-scoped repositories and MySQL. Shared validation, pagination and
+error responses live in `common`; application wiring lives in `config`.
+Flyway owns the schema; JPA validates it. Money uses `BigDecimal` / `DECIMAL(15,2)`.
+Entity graphs load required owner/category associations for list queries.
+Controllers obtain the owner exclusively from the authenticated principal.
+
 ## Dependencies
 
 Spring Boot's BOM manages the Spring starters, MySQL connector, Flyway, Lombok
@@ -24,6 +34,8 @@ JJWT implementation and Jackson integration are runtime dependencies.
 | `SPRING_DATASOURCE_USERNAME` | `expense_tracker` |
 | `SPRING_DATASOURCE_PASSWORD` | Required; no password is committed |
 | `MYSQL_DATABASE` | Compose only: `expense_tracker` |
+| `MYSQL_USER` | Compose database account; match `SPRING_DATASOURCE_USERNAME` |
+| `MYSQL_PASSWORD` | Compose account password; match `SPRING_DATASOURCE_PASSWORD` |
 | `MYSQL_ROOT_PASSWORD` | Required by Compose for MySQL initialization |
 | `JWT_SECRET` | Required Base64 encoding of at least 32 cryptographically random bytes; no default |
 | `JWT_EXPIRATION_SECONDS` | Positive token lifetime in seconds; defaults to `3600` |
@@ -50,20 +62,54 @@ history and V1 checksum differ. Future schema changes require a new migration.
 
 ## Docker
 
-Set `SPRING_DATASOURCE_PASSWORD`, `MYSQL_ROOT_PASSWORD` and `JWT_SECRET` in your environment
-or in an ignored `.env` file, then run:
+Copy `.env.example` to `.env`, replace all illustrative passwords and generate a
+JWT secret as below. The checked-in JWT placeholder is deliberately invalid.
+Keep `MYSQL_USER` / `MYSQL_PASSWORD` equal to the app datasource username/password
+when initializing a fresh database; use a different root password. Then run:
 
 ```sh
 docker compose up --build
 ```
 
-The multi-stage Dockerfile runs Maven verify on JDK 25 and copies the executable
+The multi-stage Dockerfile caches dependency downloads from `pom.xml` before
+copying `src`, runs Maven verify (including tests and the coverage gate) on JDK 25 and copies the executable
 JAR into a Temurin 25 JRE image running as a non-root user. Compose exposes
 8080 for the application and 3306 for MySQL. The application waits for the
 database health check and connects to `mysql-db` over the Compose network.
 MySQL data persists in the `mysql-data` named volume. Credentials in Compose
 initialize a new volume; changing environment values does not change accounts
 in an existing volume. Stop the services with `docker compose down`.
+Compose supplies the application URL with the `mysql-db` service hostname;
+the localhost URL in `.env.example` is for direct local execution.
+
+### Generate JWT_SECRET in PowerShell
+
+This works in Windows PowerShell 5.1 and PowerShell 7. Generate a separate key
+for each environment; do not use the test profile key outside tests.
+
+```powershell
+if (Test-Path .env) {
+    throw '.env already exists; update it deliberately instead of overwriting it.'
+}
+Copy-Item .env.example .env
+$jwtBytes = New-Object byte[] 32
+$jwtRandom = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+try {
+    $jwtRandom.GetBytes($jwtBytes)
+} finally {
+    $jwtRandom.Dispose()
+}
+$env:JWT_SECRET = [Convert]::ToBase64String($jwtBytes)
+$envLines = Get-Content .env
+$envLines = $envLines -replace '^JWT_SECRET=.*$', ('JWT_SECRET=' + $env:JWT_SECRET)
+$utf8 = [System.Text.UTF8Encoding]::new($false)
+[System.IO.File]::WriteAllLines((Join-Path $PWD '.env'), $envLines, $utf8)
+```
+
+The script writes the secret directly to ignored `.env` without displaying it.
+Edit the placeholder passwords before running Compose. For direct local launch,
+set `SPRING_DATASOURCE_PASSWORD` (and URL/username if needed) in the shell or IDE;
+the generated `$env:JWT_SECRET` is already available to that PowerShell process.
 
 ## Security and verification
 
@@ -76,11 +122,34 @@ There are no default users or generated login passwords. Password encoding uses
 are disabled; CSRF is disabled because authentication uses the Authorization
 header rather than an automatically attached cookie.
 
+Use HTTPS outside local development; Bearer tokens grant access until expiry.
+Keep `.env`, passwords, signing keys and real tokens out of Git, Docker build
+context, logs and command transcripts. Rotate exposed credentials immediately;
+removing a file in a later commit does not remove it from Git history. Restrict
+public MySQL port exposure for deployment and protect or disable Swagger where
+appropriate. See [SECURITY_AUDIT.md](SECURITY_AUDIT.md) for the repository scan scope
+and results. Test fixtures contain intentionally fake credentials only.
+
 ```sh
 ./mvnw verify
 ```
 
 On Windows, use `.\mvnw.cmd verify`. Ensure `JAVA_HOME` points to JDK 25.
+Use `clean verify` for a fresh build. `verify` generates JaCoCo HTML, XML and CSV
+reports in `target/site/jacoco/`; open `target/site/jacoco/index.html` to inspect
+coverage. The build fails below **80% line coverage for each `*Service` class**
+and each `auth` package (including `auth.validation`). Service classes live in
+their feature packages, so a per-class rule provides a stricter gate than one
+aggregate service-package threshold. The report includes all production code.
+Only the JaCoCo Maven plugin was added; application dependencies are unchanged.
+
+GitHub Actions runs `./mvnw --batch-mode verify` with Temurin 25 and Maven cache
+for pushes and pull requests targeting `main`, then uploads the generated
+coverage directory. The workflow is at the **Git repository root**
+(`../.github/workflows/ci.yml` relative to this Maven project). The job's working
+directory and cache path point to `expense-tracker-api`. Tests use the fake key
+in `application-test.properties`; no production GitHub secrets are required.
+
 Tests use H2 in MySQL mode and run the production Flyway migration; they do not
 connect to local MySQL. Repository tests use `@DataJpaTest` and verify ownership,
 date/category filters, scoped mutations and the SQL count for entity graphs.

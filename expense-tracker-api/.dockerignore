@@ -5,3 +5,10 @@ target/
 .env.*
 !.env.example
 *.log
+application-local.properties
+application-local.yml
+application-local.yaml
+*.pem
+*.key
+*.p12
+*.jks
