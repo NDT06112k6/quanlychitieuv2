@@ -2,6 +2,7 @@ package com.example.expensetracker.common.exception;
 
 import com.example.expensetracker.auth.EmailAlreadyExistsException;
 import com.example.expensetracker.budget.DuplicateBudgetException;
+import com.example.expensetracker.common.util.ConstraintViolationUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
@@ -14,11 +15,15 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.validation.FieldError;
+import org.springframework.validation.BindException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.web.ErrorResponse;
 import org.springframework.web.HttpMediaTypeNotAcceptableException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
@@ -29,8 +34,8 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 @Slf4j
 public class GlobalExceptionHandler {
 
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ApiErrorResponse> handleValidation(MethodArgumentNotValidException exception,
+    @ExceptionHandler({MethodArgumentNotValidException.class, BindException.class})
+    public ResponseEntity<ApiErrorResponse> handleValidation(BindException exception,
             HttpServletRequest request) {
         List<FieldValidationError> errors = new ArrayList<>();
         for (FieldError fieldError : exception.getBindingResult().getFieldErrors()) {
@@ -81,9 +86,22 @@ public class GlobalExceptionHandler {
         return response;
     }
 
-    @ExceptionHandler({HttpMessageNotReadableException.class, IllegalArgumentException.class})
+    @ExceptionHandler({HttpMessageNotReadableException.class, IllegalArgumentException.class,
+            MethodArgumentTypeMismatchException.class, MissingServletRequestParameterException.class})
     public ResponseEntity<ApiErrorResponse> handleInvalidInput(Exception exception, HttpServletRequest request) {
         ResponseEntity<ApiErrorResponse> response = respond(HttpStatus.BAD_REQUEST, ErrorMessages.INVALID_REQUEST, request);
+        return response;
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiErrorResponse> handleIntegrityError(DataIntegrityViolationException exception,
+            HttpServletRequest request) {
+        if (ConstraintViolationUtil.matches(exception, "fk_transactions_category")
+                || ConstraintViolationUtil.matches(exception, "fk_budgets_category")) {
+            ResponseEntity<ApiErrorResponse> response = respond(HttpStatus.CONFLICT, ErrorMessages.RESOURCE_IN_USE, request);
+            return response;
+        }
+        ResponseEntity<ApiErrorResponse> response = handleUnexpectedError(exception, request);
         return response;
     }
 

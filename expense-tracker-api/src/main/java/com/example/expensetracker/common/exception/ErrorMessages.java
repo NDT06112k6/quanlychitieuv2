@@ -10,6 +10,7 @@ public final class ErrorMessages {
     public static final String VALIDATION_FAILED = "Request validation failed";
     public static final String INVALID_REQUEST = "Invalid request";
     public static final String INTERNAL_ERROR = "An unexpected error occurred";
+    public static final String RESOURCE_IN_USE = "Resource is referenced by existing data";
 
     private ErrorMessages() {
     }

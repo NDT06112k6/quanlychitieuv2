@@ -12,6 +12,17 @@ public final class PageableUtil {
     private PageableUtil() {
     }
 
+    public static Pageable forController(Pageable pageable) {
+        Pageable boundedPageable = bounded(pageable);
+        for (Sort.Order order : pageable.getSort()) {
+            if (!ID_PROPERTY.equals(order.getProperty()) || order.getDirection() != Sort.Direction.DESC
+                    || order.isIgnoreCase()) {
+                throw new IllegalArgumentException("Only sort=id,desc is supported");
+            }
+        }
+        return boundedPageable;
+    }
+
     public static Pageable bounded(Pageable pageable) {
         if (pageable == null || pageable.isUnpaged()) {
             throw new IllegalArgumentException("Pagination is required");
