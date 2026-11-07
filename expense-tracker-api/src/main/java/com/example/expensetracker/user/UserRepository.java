@@ -10,6 +10,12 @@ public interface UserRepository extends Repository<User, Long> {
 
     User save(User user);
 
+    User saveAndFlush(User user);
+
+    Optional<User> findByEmail(String email);
+
+    boolean existsByEmail(String email);
+
     Optional<User> findByIdAndEnabledTrue(Long userId);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)

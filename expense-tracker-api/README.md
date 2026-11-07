@@ -1,7 +1,7 @@
 # Expense Tracker API
 
-Domain and persistence foundation for a REST API using Java 25, Spring Boot 4.1.2, Maven,
-Spring Security, JPA, Flyway and MySQL 8.0. No Thymeleaf is included.
+Stateless REST API using Java 25, Spring Boot 4.1.2, Maven, Spring Security,
+JJWT, JPA, Flyway, MySQL 8.0 and Swagger (springdoc).
 
 ## Dependencies
 
@@ -25,6 +25,8 @@ JJWT implementation and Jackson integration are runtime dependencies.
 | `SPRING_DATASOURCE_PASSWORD` | Required; no password is committed |
 | `MYSQL_DATABASE` | Compose only: `expense_tracker` |
 | `MYSQL_ROOT_PASSWORD` | Required by Compose for MySQL initialization |
+| `JWT_SECRET` | Required Base64 encoding of at least 32 cryptographically random bytes; no default |
+| `JWT_EXPIRATION_SECONDS` | Positive token lifetime in seconds; defaults to `3600` |
 
 For local execution, create the MySQL database and grant the application user
 permissions to migrate its schema. Set the datasource variables in your shell
@@ -48,7 +50,7 @@ history and V1 checksum differ. Future schema changes require a new migration.
 
 ## Docker
 
-Set `SPRING_DATASOURCE_PASSWORD` and `MYSQL_ROOT_PASSWORD` in your environment
+Set `SPRING_DATASOURCE_PASSWORD`, `MYSQL_ROOT_PASSWORD` and `JWT_SECRET` in your environment
 or in an ignored `.env` file, then run:
 
 ```sh
@@ -65,10 +67,14 @@ in an existing volume. Stop the services with `docker compose down`.
 
 ## Security and verification
 
-All endpoints, including Swagger UI and `/v3/api-docs`, return 403 until
-authentication and endpoint permissions are implemented in a later phase.
-There are no default users or generated login passwords. Password encoding
-uses `DelegatingPasswordEncoder`.
+Public routes are `POST /api/v1/auth/register`, `POST /api/v1/auth/login`,
+`/v3/api-docs/**`, `/swagger-ui/**` and `/swagger-ui.html`. Every other route
+requires a verified Bearer access token. Missing, malformed or expired credentials
+produce JSON 401; ownership/authorization failures produce JSON 403.
+There are no default users or generated login passwords. Password encoding uses
+`DelegatingPasswordEncoder`. Sessions, form login and HTTP Basic authentication
+are disabled; CSRF is disabled because authentication uses the Authorization
+header rather than an automatically attached cookie.
 
 ```sh
 ./mvnw verify
@@ -80,7 +86,7 @@ connect to local MySQL. Repository tests use `@DataJpaTest` and verify ownership
 date/category filters, scoped mutations and the SQL count for entity graphs.
 Service tests use Mockito without a Spring context. The suite also checks startup,
 exact money storage, ownership foreign keys, budget uniqueness/types and
-deny-by-default HTTP access.
+JWT validation, auth HTTP responses and protected/public access rules.
 H2 does not replace validation against MySQL for future database-specific changes.
 
 ## Domain and persistence (phase 2)
@@ -97,7 +103,8 @@ an untrusted request body. Read/update/delete queries include the owner ID.
 Missing and foreign resources both produce `AccessDeniedException`, without
 performing an unscoped lookup to disclose their existence. Repositories expose
 only the operations needed by the domain rather than inherited unscoped CRUD.
-User registration and HTTP/JWT authentication belong to the next phase.
+Business HTTP controllers must obtain their owner ID from the verified JWT
+principal rather than a client-supplied owner ID.
 
 - `UserService`: profile lookup/update and password changes using the configured
   delegating encoder; response DTOs never contain password hashes.
@@ -114,8 +121,8 @@ User registration and HTTP/JWT authentication belong to the next phase.
 All money uses `BigDecimal` with exact two-decimal storage; values requiring
 rounding, non-positive amounts and values exceeding `DECIMAL(15,2)` are rejected.
 All list services require `Pageable`, cap pages at 100 rows and sort by descending
-ID for stable paging. Unpaged requests are rejected. There are no API endpoints
-in this phase, so the deny-all HTTP policy from phase 1 remains in effect.
+ID for stable paging. Unpaged requests are rejected. Business HTTP endpoints
+will be added separately; the authentication endpoints are described below.
 
 Transaction/budget list and detail queries use
 `@EntityGraph(attributePaths = {"category", "user"})`. Category queries fetch
@@ -129,3 +136,59 @@ range, rather than automatically returned by transaction mutations.
 The implementation follows the fetch-graph examples in
 [Spring Data's official sample](https://github.com/spring-projects/spring-data-examples/blob/main/jpa/jpa21/README.md)
 and the [JPA query documentation](https://docs.spring.io/spring-data/jpa/reference/jpa/query-methods.html).
+
+## Authentication (phase 3)
+
+Generate a secret with a cryptographic RNG, for example `openssl rand -base64 32`,
+and supply its output through `JWT_SECRET` in your environment or an ignored
+Compose `.env` file. Base64 is the storage encoding; the **decoded key** must be
+at least 32 bytes. Missing, invalid or weak configuration prevents startup.
+The public fixture key in `src/test/resources/application-test.properties`
+is used only for tests and is not packaged in the runtime JAR.
+
+| Endpoint | Request fields | Success |
+| --- | --- | --- |
+| `POST /api/v1/auth/register` | `email`, `password`, `displayName` | 201 and access token |
+| `POST /api/v1/auth/login` | `email`, `password` | 200 and access token |
+
+The response is `{ "accessToken": "...", "tokenType": "Bearer", "expiresInSeconds": 3600 }`.
+Use `Authorization: Bearer <accessToken>` on protected requests. Email addresses
+are trimmed and lowercased with `Locale.ROOT` before validation, storage and
+lookup. Registration creates role `USER`; clients cannot choose a role.
+Passwords must be nonblank, at least 8 characters for registration, and at most
+72 UTF-8 bytes for BCrypt. Password whitespace is preserved.
+
+Duplicate registration returns 409, including a concurrent database uniqueness
+violation. Wrong passwords, missing accounts and disabled accounts all return
+the same 401 message. Login also checks a dummy password hash for unknown accounts
+to reduce timing differences. Neither passwords nor tokens are logged, and auth
+DTO `toString()` methods redact sensitive fields.
+
+JWTs use HS256. Only that algorithm is accepted by the parser. The signed
+subject is the numeric user ID, with a `role` claim, `iat` and `exp`; there is no
+email or password in the token. `JwtAuthenticationFilter` verifies the token
+before setting `AuthPrincipal(userId, role)` in a fresh SecurityContext.
+Controllers can receive it with `@AuthenticationPrincipal AuthPrincipal principal`.
+The filter is installed only in the Spring Security chain, avoiding duplicate
+servlet-filter registration. Invalid tokens stay anonymous; public endpoints
+remain accessible and protected endpoints return 401.
+
+The key and expiration setting are read at startup; changes require a restart.
+Key rotation invalidates tokens signed with the previous key. Tokens are checked
+locally on each request without a database lookup or server session. There is
+no refresh/revocation endpoint in this phase: password changes, role changes or
+account disabling do not revoke an already issued token before its expiration.
+
+API and security errors share `status`, `error`, `message`, `timestamp` (UTC)
+and `path`. Validation responses add `fieldErrors`, a list of `field`/`message`
+pairs, without echoing rejected values. Unexpected failures return a generic 500;
+logs retain the exception type and stack trace while removing exception messages
+and causes that may contain credentials or PII.
+Hibernate's raw JDBC error/warning loggers are disabled for the same reason;
+application error handling still records sanitized system failures.
+
+The design follows [JJWT 0.13.0's signed-claims parsing guidance](https://github.com/jwtk/jjwt/blob/0.13.0/README.adoc)
+and [Spring Security's JWT sample](https://github.com/spring-projects/spring-security-samples/tree/main/servlet/spring-boot/java/jwt/login).
+JJWT supplies signing/verification with the already installed dependency;
+`SessionCreationPolicy.STATELESS` supplies session-free request authentication.
+No dependencies were added in this phase.

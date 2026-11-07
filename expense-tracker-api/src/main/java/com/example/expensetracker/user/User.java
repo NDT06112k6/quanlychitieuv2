@@ -17,6 +17,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.generator.EventType;
 import org.hibernate.type.SqlTypes;
 import com.example.expensetracker.common.util.DomainValidation;
+import com.example.expensetracker.common.util.EmailNormalizer;
 
 @Entity
 @Table(name = "users")
@@ -54,7 +55,8 @@ public class User {
     private LocalDateTime createdAt;
 
     public User(String email, String passwordHash, String displayName) {
-        this.email = DomainValidation.requireText(email, MAXIMUM_EMAIL_LENGTH);
+        String normalizedEmail = EmailNormalizer.normalize(email);
+        this.email = DomainValidation.requireText(normalizedEmail, MAXIMUM_EMAIL_LENGTH);
         this.passwordHash = DomainValidation.requireText(passwordHash, MAXIMUM_HASH_LENGTH);
         this.displayName = DomainValidation.requireText(displayName, MAXIMUM_NAME_LENGTH);
     }

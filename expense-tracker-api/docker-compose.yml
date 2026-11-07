@@ -29,6 +29,8 @@ services:
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql-db:3306/${MYSQL_DATABASE:-expense_tracker}
       SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:-expense_tracker}
       SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:?Set SPRING_DATASOURCE_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET to Base64 encoding of at least 32 random bytes}
+      JWT_EXPIRATION_SECONDS: ${JWT_EXPIRATION_SECONDS:-3600}
     depends_on:
       mysql-db:
         condition: service_healthy
