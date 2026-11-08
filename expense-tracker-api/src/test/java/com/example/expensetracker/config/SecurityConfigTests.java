@@ -144,8 +144,37 @@ class SecurityConfigTests {
         mockMvc.perform(get(AuthRoutes.BASE + "/private")).andExpect(status().isUnauthorized());
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {StaticWebSecurity.ROOT, StaticWebSecurity.INDEX,
+            "/css/security-test.css", "/js/security-test.js", StaticWebSecurity.FAVICON})
+    void allowsOnlyTheExplicitStaticPathsAndWritesTheAppPolicy(String path) throws Exception {
+        mockMvc.perform(get(path))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Security-Policy", StaticWebSecurity.CONTENT_SECURITY_POLICY))
+                .andExpect(header().string("X-Content-Type-Options", "nosniff"));
+    }
+
+    @Test
+    void keepsApiRequestsProtectedAfterMakingTheFrontendPublic() throws Exception {
+        mockMvc.perform(get("/api/v1/transactions"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.status").value(401));
+    }
+
+    @Test
+    void doesNotPermitStaticPostRequests() throws Exception {
+        mockMvc.perform(post(StaticWebSecurity.ROOT)).andExpect(status().isUnauthorized());
+    }
+
     @RestController
     static class TestEndpoints {
+
+        @GetMapping({StaticWebSecurity.ROOT, StaticWebSecurity.INDEX,
+                "/css/security-test.css", "/js/security-test.js", StaticWebSecurity.FAVICON})
+        public String appStaticResource() {
+            String response = "public app resource";
+            return response;
+        }
 
         @GetMapping(PROTECTED)
         public AuthPrincipal protectedEndpoint(@AuthenticationPrincipal AuthPrincipal principal) {
