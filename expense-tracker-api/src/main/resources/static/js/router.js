@@ -10,8 +10,38 @@ import {render as categories} from './pages/categories.js';
 import {render as budgets} from './pages/budgets.js';
 import {render as profile} from './pages/profile.js';
 
-const PAGES = new Map([[ROUTES.LOGIN, login], [ROUTES.REGISTER, register], [ROUTES.DASHBOARD, dashboard],
-    [ROUTES.TRANSACTIONS, transactions], [ROUTES.CATEGORIES, categories], [ROUTES.BUDGETS, budgets], [ROUTES.PROFILE, profile]]);
+const PAGES = new Map(
+    [
+        [
+            ROUTES.LOGIN,
+            login
+        ],
+        [
+            ROUTES.REGISTER,
+            register
+        ],
+        [
+            ROUTES.DASHBOARD,
+            dashboard
+        ],
+        [
+            ROUTES.TRANSACTIONS,
+            transactions
+        ],
+        [
+            ROUTES.CATEGORIES,
+            categories
+        ],
+        [
+            ROUTES.BUDGETS,
+            budgets
+        ],
+        [
+            ROUTES.PROFILE,
+            profile
+        ]
+    ]
+);
 const PUBLIC = new Set([ROUTES.LOGIN, ROUTES.REGISTER]);
 let activeRequest;
 let revision = 0;
@@ -31,7 +61,12 @@ async function navigateToRoute(root) {
         return;
     }
     const container = prepareContainer(root, path);
-    const context = {container, signal: activeRequest.signal, isCurrent: () => currentRevision === revision};
+    const context = {
+        container,
+        signal: activeRequest.signal,
+        isCurrent: () => currentRevision
+        === revision
+    };
     try {
         const render = PAGES.get(path);
         if (!render) {
@@ -44,7 +79,18 @@ async function navigateToRoute(root) {
         }
     } catch (error) {
         if (context.isCurrent() && error.name !== 'AbortError') {
-            container.append(notice(error.message, 'error'), button('Thử lại', () => navigateToRoute(root)));
+            container.append(
+                notice(
+                    error.message,
+                    'error'
+                ),
+                button(
+                    'Thử lại',
+                    () => navigateToRoute(
+                        root
+                    )
+                )
+            );
         }
     }
 }
@@ -72,7 +118,9 @@ function prepareContainer(root, path) {
 }
 
 function showUnknownRoute(container) {
-    container.append(el('h1', {text: 'Không tìm thấy trang', tabIndex: -1}),
+    container.append(
+        el('h1', {text: 'Không tìm thấy trang', tabIndex: -1}),
         el('p', {text: 'Đường dẫn này không có trong sổ chi tiêu của bạn.'}),
-        el('a', {href: `#${ROUTES.DASHBOARD}`, className: 'button', text: 'Về tổng quan'}));
+        el('a', {href: `#${ROUTES.DASHBOARD}`, className: 'button', text: 'Về tổng quan'})
+    );
 }

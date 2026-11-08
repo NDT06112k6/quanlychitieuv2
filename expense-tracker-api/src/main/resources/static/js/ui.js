@@ -2,16 +2,25 @@ import {el, button, clear, notice} from './dom.js';
 import {MESSAGES} from './constants.js';
 import {ValidationError} from './validation.js';
 
-const FIELD_HINTS = Object.freeze({email: 'Địa chỉ email không hợp lệ hoặc vượt 255 ký tự.',
-    password: 'Kiểm tra mật khẩu: ít nhất 8 ký tự, tối đa 72 byte UTF-8.',
-    currentPassword: 'Vui lòng kiểm tra mật khẩu hiện tại (tối đa 72 byte UTF-8).',
-    newPassword: 'Mật khẩu mới cần ít nhất 8 ký tự và tối đa 72 byte UTF-8.',
-    name: 'Tên danh mục cần từ 1 đến 100 ký tự.', displayName: 'Tên hiển thị cần từ 1 đến 100 ký tự.',
-    categoryId: 'Vui lòng chọn danh mục của bạn.', amount: 'Kiểm tra số tiền dương và tối đa hai chữ số thập phân.',
-    limitAmount: 'Kiểm tra hạn mức dương và tối đa hai chữ số thập phân.',
-    occurredOn: 'Vui lòng chọn ngày hợp lệ.', startDate: 'Ngày bắt đầu không hợp lệ.',
-    endDate: 'Ngày kết thúc không hợp lệ.', period: 'Kỳ tháng hoặc tuần không hợp lệ.',
-    type: 'Vui lòng chọn loại hợp lệ.', note: 'Ghi chú tối đa 1.000 ký tự.'});
+const FIELD_HINTS = Object.freeze(
+    {
+        email: 'Địa chỉ email không hợp lệ hoặc vượt 255 ký tự.',
+        password: 'Kiểm tra mật khẩu: ít nhất 8 ký tự, tối đa 72 byte UTF-8.',
+        currentPassword: 'Vui lòng kiểm tra mật khẩu hiện tại (tối đa 72 byte UTF-8).',
+        newPassword: 'Mật khẩu mới cần ít nhất 8 ký tự và tối đa 72 byte UTF-8.',
+        name: 'Tên danh mục cần từ 1 đến 100 ký tự.',
+        displayName: 'Tên hiển thị cần từ 1 đến 100 ký tự.',
+        categoryId: 'Vui lòng chọn danh mục của bạn.',
+        amount: 'Kiểm tra số tiền dương và tối đa hai chữ số thập phân.',
+        limitAmount: 'Kiểm tra hạn mức dương và tối đa hai chữ số thập phân.',
+        occurredOn: 'Vui lòng chọn ngày hợp lệ.',
+        startDate: 'Ngày bắt đầu không hợp lệ.',
+        endDate: 'Ngày kết thúc không hợp lệ.',
+        period: 'Kỳ tháng hoặc tuần không hợp lệ.',
+        type: 'Vui lòng chọn loại hợp lệ.',
+        note: 'Ghi chú tối đa 1.000 ký tự.'
+    }
+);
 
 export function isActive(context) {
     return !context.signal.aborted && context.isCurrent();
@@ -24,27 +33,56 @@ export function showPageError(context, error, target) {
 }
 
 export function closePanelButton(panel) {
-    return button('Hủy', () => {
-        panel.hidden = true;
-    }, 'button button-secondary');
+    return button(
+        'Hủy',
+        () => {
+            panel.hidden = true;
+        },
+        'button button-secondary'
+    );
 }
 
 export function createForm(configuration) {
     const errors = el('div', {className: 'form-feedback'});
-    const fieldset = el('fieldset', {className: 'field-grid'}, configuration.fields.map((entry) => entry.wrapper));
-    const submit = el('button', {type: 'submit', className: 'button', text: configuration.submitLabel});
-    const element = el('form', {className: 'data-form', noValidate: true}, [errors, fieldset,
-        el('div', {className: 'form-actions'}, [submit])]);
+    const fieldset = el(
+        'fieldset',
+        {
+            className: 'field-grid'
+        },
+        configuration.fields.map(
+            (entry) => entry.wrapper
+        )
+    );
+    const submit = el(
+        'button',
+        {
+            type: 'submit',
+            className: 'button',
+            text: configuration.submitLabel
+        }
+    );
+    const element = el(
+        'form',
+        {className: 'data-form', noValidate: true},
+        [
+            errors,
+            fieldset,
+            el('div', {className: 'form-actions'}, [submit])
+        ]
+    );
     const resetErrors = () => resetFieldErrors(configuration.fields, errors);
     const setErrors = (error) => displayFormErrors(error, {fields: configuration.fields, errors});
-    element.addEventListener('submit', async (event) => {
-        event.preventDefault();
-        if (submit.disabled) {
-            return;
+    element.addEventListener(
+        'submit',
+        async (event) => {
+            event.preventDefault();
+            if (submit.disabled) {
+                return;
+            }
+            resetErrors();
+            await submitForm(configuration, {fieldset, submit, element}, setErrors);
         }
-        resetErrors();
-        await submitForm(configuration, {fieldset, submit, element}, setErrors);
-    });
+    );
     return {element, resetErrors, setErrors};
 }
 
@@ -73,7 +111,10 @@ function readFields(fields) {
     for (const entry of fields) {
         const input = entry.input;
         if (input.validity?.badInput) {
-            throw new ValidationError(input.name, 'Thông tin chưa đúng định dạng. Vui lòng nhập lại.');
+            throw new ValidationError(
+                input.name,
+                'Thông tin chưa đúng định dạng. Vui lòng nhập lại.'
+            );
         }
         if (input.required && !input.value.trim()) {
             throw new ValidationError(input.name, 'Vui lòng nhập hoặc chọn thông tin này.');
@@ -100,9 +141,17 @@ function displayFormErrors(error, context) {
     let first;
     for (const issue of error.fieldErrors || []) {
         const name = issue.field.split('.').pop();
-        const entry = context.fields.find((candidate) => candidate.input.name === issue.field || candidate.input.name === name);
+        const entry = context.fields.find(
+            (candidate) => candidate.input.name
+            === issue.field
+            || candidate.input.name
+            === name
+        );
         if (entry) {
-            entry.error.textContent = error.status ? (FIELD_HINTS[name] || MESSAGES.INVALID) : issue.message;
+            entry.error.textContent = error.status
+            ? (FIELD_HINTS[name]
+                || MESSAGES.INVALID)
+            : issue.message;
             entry.input.setAttribute('aria-invalid', 'true');
             first = first || entry.input;
         }
@@ -113,13 +162,39 @@ function displayFormErrors(error, context) {
 }
 
 export function table(headers, rows) {
-    const head = el('tr', {}, headers.map((title) => el('th', {text: title, attrs: {scope: 'col'}})));
+    const head = el(
+        'tr',
+        {},
+        headers.map(
+            (title) => el(
+                'th',
+                {
+                    text: title,
+                    attrs: {
+                        scope: 'col'
+                    }
+                }
+            )
+        )
+    );
     const body = el('tbody');
     for (const row of rows) {
         body.append(el('tr', {}, row.map((cell) => el('td', {}, [cell]))));
     }
     const content = el('table', {className: 'data-table'}, [el('thead', {}, [head]), body]);
-    return el('div', {className: 'table-wrap', tabIndex: 0, attrs: {'aria-label': 'Bảng dữ liệu có thể cuộn ngang'}}, [content]);
+    return el(
+        'div',
+        {
+            className: 'table-wrap',
+            tabIndex: 0,
+            attrs: {
+                'aria-label': 'Bảng dữ liệu có thể cuộn ngang'
+            }
+        },
+        [
+            content
+        ]
+    );
 }
 
 export function pagination(page, onPage) {
@@ -127,8 +202,31 @@ export function pagination(page, onPage) {
     const next = button('Sau →', () => onPage(page.number + 1), 'button button-secondary');
     previous.disabled = page.number <= 0;
     next.disabled = page.number + 1 >= page.totalPages;
-    const label = page.totalElements === 0 ? 'Chưa có dữ liệu' :
-        `Trang ${page.number + 1} / ${page.totalPages} · ${page.totalElements} bản ghi`;
-    return el('nav', {className: 'pagination', attrs: {'aria-label': 'Phân trang'}}, [
-        el('span', {className: 'muted', text: label}), el('div', {className: 'action-row'}, [previous, next])]);
+    const label = page.totalElements === 0
+    ? 'Chưa có dữ liệu'
+    :
+    `Trang ${page.number + 1} / ${page.totalPages} · ${page.totalElements} bản ghi`;
+    return el(
+        'nav',
+        {className: 'pagination', attrs: {'aria-label': 'Phân trang'}},
+        [
+            el(
+                'span',
+                {
+                    className: 'muted',
+                    text: label
+                }
+            ),
+            el(
+                'div',
+                {
+                    className: 'action-row'
+                },
+                [
+                    previous,
+                    next
+                ]
+            )
+        ]
+    );
 }

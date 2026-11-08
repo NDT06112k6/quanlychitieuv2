@@ -1,8 +1,20 @@
 import {API, API_BASE, AUTH_SCHEME, HTTP_METHODS, MESSAGES} from './constants.js';
 import {expireSession, getToken} from './auth.js';
 
-const EXACT_FIELDS = new Set(['amount', 'limitAmount', 'totalIncome', 'totalExpense',
-    'balance', 'spent', 'remaining', 'exceededAmount', 'id', 'categoryId']);
+const EXACT_FIELDS = new Set(
+    [
+        'amount',
+        'limitAmount',
+        'totalIncome',
+        'totalExpense',
+        'balance',
+        'spent',
+        'remaining',
+        'exceededAmount',
+        'id',
+        'categoryId'
+    ]
+);
 const JSON_TOKENS = /"(?:[^"\\]|\\.)*"|-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?|[^\s]/g;
 const NUMBER_TOKEN = /^-?\d/;
 const STATUS = Object.freeze({BAD_REQUEST: 400, UNAUTHORIZED: 401, FORBIDDEN: 403, CONFLICT: 409});
@@ -19,19 +31,22 @@ export class ApiError extends Error {
 export function parseResponse(text) {
     let previous = '';
     let exactValue = false;
-    const protectedJson = text.replace(JSON_TOKENS, (token) => {
-        if (token === ':') {
-            exactValue = previous.startsWith('"') && EXACT_FIELDS.has(JSON.parse(previous));
-        } else if (NUMBER_TOKEN.test(token) && exactValue) {
-            exactValue = false;
+    const protectedJson = text.replace(
+        JSON_TOKENS,
+        (token) => {
+            if (token === ':') {
+                exactValue = previous.startsWith('"') && EXACT_FIELDS.has(JSON.parse(previous));
+            } else if (NUMBER_TOKEN.test(token) && exactValue) {
+                exactValue = false;
+                previous = token;
+                return JSON.stringify(token);
+            } else {
+                exactValue = false;
+            }
             previous = token;
-            return JSON.stringify(token);
-        } else {
-            exactValue = false;
+            return token;
         }
-        previous = token;
-        return token;
-    });
+    );
     const data = JSON.parse(protectedJson);
     return data;
 }
@@ -60,8 +75,13 @@ function requestOptions(options, token) {
     if (options.body !== undefined) {
         headers['Content-Type'] = 'application/json';
     }
-    const configuration = {method: options.method || HTTP_METHODS.GET, headers,
-        signal: options.signal, credentials: 'omit', cache: 'no-store'};
+    const configuration = {
+        method: options.method || HTTP_METHODS.GET,
+        headers,
+        signal: options.signal,
+        credentials: 'omit',
+        cache: 'no-store'
+    };
     if (options.body !== undefined) {
         configuration.body = JSON.stringify(options.body);
     }
@@ -123,7 +143,16 @@ export async function request(path, options = {}) {
     const data = await readResponse(response);
     if (!response.ok) {
         const fieldErrors = response.status === STATUS.BAD_REQUEST ? data?.fieldErrors : [];
-        throw new ApiError(errorMessage(response.status, path), {status: response.status, fieldErrors});
+        throw new ApiError(
+            errorMessage(
+                response.status,
+                path
+            ),
+            {
+                status: response.status,
+                fieldErrors
+            }
+        );
     }
     return data;
 }

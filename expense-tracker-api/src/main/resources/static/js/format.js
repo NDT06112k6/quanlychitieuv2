@@ -1,5 +1,12 @@
-const CURRENCY = new Intl.NumberFormat('vi-VN', {style: 'currency', currency: 'VND',
-    minimumFractionDigits: 2, maximumFractionDigits: 2});
+const CURRENCY = new Intl.NumberFormat(
+    'vi-VN',
+    {
+        style: 'currency',
+        currency: 'VND',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }
+);
 const DECIMAL = /^(-?)(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/;
 const CENTS_SCALE = 2;
 
@@ -32,9 +39,13 @@ export function money(value) {
     const magnitude = cents < 0n ? -cents : cents;
     const fraction = (magnitude % 100n).toString().padStart(CENTS_SCALE, '0');
     const parts = CURRENCY.formatToParts(magnitude / 100n);
-    const formatted = parts.map((part) => {
-        return part.type === 'fraction' ? fraction : part.value;
-    }).join('');
+    const formatted = parts.map(
+        (part) => {
+            return part.type === 'fraction' ? fraction : part.value;
+        }
+    ).join(
+        ''
+    );
     return `${cents < 0n ? '−' : ''}${formatted}`;
 }
 

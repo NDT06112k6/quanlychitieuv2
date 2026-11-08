@@ -48,15 +48,49 @@ export function button(label, handler, className = 'button') {
 }
 
 export function notice(message, kind = 'info') {
-    const node = el('div', {className: `notice notice-${kind}`, text: message,
-        attrs: {role: kind === 'error' ? 'alert' : 'status'}});
+    const node = el(
+        'div',
+        {
+            className: `notice notice-${kind}`,
+            text: message,
+            attrs: {role: kind === 'error' ? 'alert' : 'status'}
+        }
+    );
     return node;
 }
 
 export function pageHeader(title, subtitle, actions = []) {
-    const description = el('div', {}, [el('p', {className: 'eyebrow', text: 'KHÔNG GIAN TÀI CHÍNH CỦA BẠN'}),
-        el('h1', {text: title, tabIndex: -1}), el('p', {className: 'muted', text: subtitle})]);
-    return el('header', {className: 'page-header'}, [description, el('div', {className: 'action-row'}, actions)]);
+    const description = el(
+        'div',
+        {},
+        [
+            el(
+                'p',
+                {
+                    className: 'eyebrow',
+                    text: 'KHÔNG GIAN TÀI CHÍNH CỦA BẠN'
+                }
+            ),
+            el('h1', {text: title, tabIndex: -1}),
+            el('p', {className: 'muted', text: subtitle})
+        ]
+    );
+    return el(
+        'header',
+        {
+            className: 'page-header'
+        },
+        [
+            description,
+            el(
+                'div',
+                {
+                    className: 'action-row'
+                },
+                actions
+            )
+        ]
+    );
 }
 
 export function field(name, label, options = {}) {
@@ -64,11 +98,42 @@ export function field(name, label, options = {}) {
     const identifier = `field-${name}-${fieldSequence}`;
     const input = createInput(name, options);
     input.id = identifier;
-    const error = el('span', {className: 'field-error', attrs: {id: `${identifier}-error`, 'aria-live': 'polite'}});
+    const error = el(
+        'span',
+        {
+            className: 'field-error',
+            attrs: {
+                id: `${identifier}-error`,
+                'aria-live': 'polite'
+            }
+        }
+    );
     input.setAttribute('aria-describedby', `${identifier}-error`);
-    const wrapper = el('div', {className: 'field'}, [el('label', {text: label, htmlFor: identifier}), input]);
+    const wrapper = el(
+        'div',
+        {
+            className: 'field'
+        },
+        [
+            el(
+                'label',
+                {
+                    text: label,
+                    htmlFor: identifier
+                }
+            ),
+            input
+        ]
+    );
     if (options.hint) {
-        const hint = el('small', {text: options.hint, className: 'muted', id: `${identifier}-hint`});
+        const hint = el(
+            'small',
+            {
+                text: options.hint,
+                className: 'muted',
+                id: `${identifier}-hint`
+            }
+        );
         input.setAttribute('aria-describedby', `${identifier}-hint ${identifier}-error`);
         wrapper.append(hint);
     }
