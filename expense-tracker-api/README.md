@@ -114,8 +114,10 @@ the generated `$env:JWT_SECRET` is already available to that PowerShell process.
 ## Security and verification
 
 Public routes are `POST /api/v1/auth/register`, `POST /api/v1/auth/login`,
-`/v3/api-docs/**`, `/swagger-ui/**` and `/swagger-ui.html`. Every other route
-requires a verified Bearer access token. Missing, malformed or expired credentials
+`/v3/api-docs/**`, `/swagger-ui/**` and `/swagger-ui.html`. The frontend's
+`GET`/`HEAD` routes `/`, `/index.html`, `/css/**`, `/js/**` and `/favicon.ico`
+are also public. Other routes, including business APIs, require a verified
+Bearer access token. Missing, malformed or expired credentials
 produce JSON 401; ownership/authorization failures produce JSON 403.
 There are no default users or generated login passwords. Password encoding uses
 `DelegatingPasswordEncoder`. Sessions, form login and HTTP Basic authentication
@@ -133,6 +135,8 @@ and results. Test fixtures contain intentionally fake credentials only.
 ```sh
 ./mvnw verify
 ```
+
+
 
 On Windows, use `.\mvnw.cmd verify`. Ensure `JAVA_HOME` points to JDK 25.
 Use `clean verify` for a fresh build. `verify` generates JaCoCo HTML, XML and CSV
@@ -387,3 +391,88 @@ curl.exe -i --get "$baseUrl/api/v1/transactions" -H $authorization `
 
 Remove-Item -LiteralPath $registrationFile, $loginFile, $categoryFile, $transactionFile
 ```
+
+## Web frontend
+
+After starting Spring Boot locally or with Docker, open **http://localhost:8080/**.
+Use a modern browser with ES modules, BigInt, Fetch and sessionStorage enabled.
+All HTML, CSS, icons and JavaScript are served from `src/main/resources/static`;
+there is no npm build, framework, CDN or external font. Hash navigation keeps
+every page on `index.html`, so refreshing `/#/transactions` needs no server routing.
+
+| Page | Hash route | What it does |
+| --- | --- | --- |
+| Login | `#/login` | Email/password authentication; generic failure message |
+| Register | `#/register` | Email, displayName, password; success returns to login |
+| Dashboard | `#/dashboard` | Server totals for selected dates, comparison bars, paged monthly/weekly budget alerts |
+| Transactions | `#/transactions` | Date/category/type filters, whitelisted sorting, pagination, create/edit/delete |
+| Categories | `#/categories` | Pagination, type filters, sort, create/rename/delete; type stays immutable |
+| Budgets | `#/budgets` | Pagination, category/type/period filters, create, edit limit only, delete |
+| Profile | `#/profile` | Read email/role, change displayName and password |
+
+Lists default to 10 rows and offer sizes up to 100. Category selectors also page
+through the real category API, retaining a selection when moving between pages.
+They do not download an unbounded category list. Dates display as `dd/MM/yyyy`.
+Money inputs accept an ungrouped decimal such as `125000.50` or `125000,50` and
+send normalized **JSON strings** (e.g. `"125000.50"`) into the existing BigDecimal
+DTOs. A JSON-aware token scanner preserves response money/Long IDs as strings;
+formatting uses BigInt cents and `Intl.NumberFormat('vi-VN')`, keeping precision
+even at `DECIMAL(15,2)` limits. Number conversion is used only for chart scale.
+
+### Screens and manual walkthrough
+
+Screenshots were not captured because browser-control approval timed out in the
+development session. The layout is described here for review: login has a pale
+green introduction beside a white form; signed-in pages have a left navigation
+rail, summary cards, filter panels and scrollable tables. On small screens the
+navigation wraps above the content, cards stack, and wide tables scroll within
+their panel. Budget warnings use both text and color. Loading, empty and error
+states are separate; errors never become fake zero totals or empty successful data.
+
+Use this checklist in the browser:
+
+1. Register an account, then log in. Check empty/invalid fields and a duplicate email.
+2. Create an expense category and an income category. Rename one; verify type cannot change.
+3. Create a transaction (e.g. an expense of `125000.50` today), edit it and exercise
+   date/category/type filters, sorting and pagination. Confirm before deleting a test item.
+4. Open Dashboard, include the transaction date and confirm totals/decimal amounts.
+5. Create a monthly budget for the expense category and current month with a limit
+   below the expense (e.g. `100000.00`). Try creating it again and check the clear 409 message.
+6. Open Dashboard budget alerts for the same month. Check the exceeded amount;
+   increase only the budget limit and check that category/period/type stay unchanged.
+7. Change displayName and password in Profile. Log out and log in with the new password.
+8. Log out again; a protected hash route should return to login. Verify a fresh
+   tab's storage behavior and that no token is placed in localStorage.
+9. Repeat at phone width and with keyboard navigation. Enter an HTML-looking name
+   such as `<img src=x onerror=alert(1)>`; it must display as text and never execute.
+10. Check a second account cannot see or use the first account's categories/data.
+    Check expired-token 401 returns to login, 403 has a friendly denial, and Swagger still opens.
+
+### Frontend security and tests
+
+JWTs are stored only in **sessionStorage**, scoped to the tab's browser session,
+instead of localStorage's longer persistence. Session storage is still readable
+by same-origin JavaScript; it does not make XSS harmless. DOM content uses text
+nodes/createElement, the app CSP permits self-hosted resources only (no inline
+scripts/styles), and static responses have nosniff, Referrer-Policy and frame
+protection. Swagger/API docs are outside the app CSP so their UI keeps working.
+
+Protected requests attach Bearer headers. A matching session's 401 clears its
+token and redirects to login with an expiry notice; bad credentials on the
+public login form show the generic login error. A late 401 from an older session
+cannot clear a newer login. Errors 400 map to fields when provided; 403/409/500
+show Vietnamese messages without technical details. Route changes abort pending
+requests, and lists reject stale filter responses. Logout clears the current tab's
+token; this backend does not revoke copied JWTs or other tabs' tokens, including
+after a password change. Existing tokens remain valid until their normal expiry.
+
+Run the Java/MockMvc security and decimal-contract checks with `mvnw.cmd clean verify`.
+The dependency-free JavaScript tests use Node's built-in runner (Node 24), without npm:
+
+```powershell
+node --test --test-isolation=none src/test/frontend/*.test.mjs
+```
+
+These tests cover client requests, session lifecycle, error handling, XSS-safe DOM,
+decimal precision, dates and validation. Browser layout/interaction review remains
+the manual checklist above; JaCoCo measures Java code, not JavaScript coverage.
