@@ -1,7 +1,7 @@
 # Expense Tracker API
 
 Stateless REST API using Java 25, Spring Boot 4.1.2, Maven, Spring Security,
-JJWT, JPA, Flyway, MySQL 8.0 and Swagger (springdoc).
+JJWT, JPA, Flyway, MySQL 8.4 in Docker Compose and Swagger (springdoc).
 
 ## Architecture
 
@@ -31,11 +31,9 @@ JJWT implementation and Jackson integration are runtime dependencies.
 | Environment variable | Default / purpose |
 | --- | --- |
 | `SPRING_DATASOURCE_URL` | `jdbc:mysql://localhost:3306/expense_tracker` |
-| `SPRING_DATASOURCE_USERNAME` | `expense_tracker` |
-| `SPRING_DATASOURCE_PASSWORD` | Required; no password is committed |
+| `SPRING_DATASOURCE_USERNAME` | `expense_tracker`; Compose also uses it for the MySQL application account |
+| `SPRING_DATASOURCE_PASSWORD` | Required; Compose also uses it for the MySQL application account password |
 | `MYSQL_DATABASE` | Compose only: `expense_tracker` |
-| `MYSQL_USER` | Compose database account; match `SPRING_DATASOURCE_USERNAME` |
-| `MYSQL_PASSWORD` | Compose account password; match `SPRING_DATASOURCE_PASSWORD` |
 | `MYSQL_ROOT_PASSWORD` | Required by Compose for MySQL initialization |
 | `JWT_SECRET` | Required Base64 encoding of at least 32 cryptographically random bytes; no default |
 | `JWT_EXPIRATION_SECONDS` | Positive token lifetime in seconds; defaults to `3600` |
@@ -62,25 +60,43 @@ history and V1 checksum differ. Future schema changes require a new migration.
 
 ## Docker
 
-Copy `.env.example` to `.env`, replace all illustrative passwords and generate a
-JWT secret as below. The checked-in JWT placeholder is deliberately invalid.
-Keep `MYSQL_USER` / `MYSQL_PASSWORD` equal to the app datasource username/password
-when initializing a fresh database; use a different root password. Then run:
+Create `.env` using the PowerShell script below, then replace the illustrative
+database passwords. The checked-in JWT placeholder is deliberately invalid.
+Compose derives the MySQL application account and password directly from
+`SPRING_DATASOURCE_USERNAME` and `SPRING_DATASOURCE_PASSWORD`; separate
+`MYSQL_USER` / `MYSQL_PASSWORD` entries in an older `.env` are not read.
+Use a different MySQL administrator password. Run these commands from `expense-tracker-api`
+with Docker Desktop's Linux engine running:
 
 ```sh
-docker compose up --build
+docker compose up --build -d
+docker compose ps
 ```
 
 The multi-stage Dockerfile caches dependency downloads from `pom.xml` before
 copying `src`, runs Maven verify (including tests and the coverage gate) on JDK 25 and copies the executable
-JAR into a Temurin 25 JRE image running as a non-root user. Compose exposes
-8080 for the application and 3306 for MySQL. The application waits for the
+JAR into a Temurin 25 JRE image running as an unprivileged user. Compose exposes
+8080 for the application and **3307 on the host to MySQL's internal port 3306**.
+The application waits for the
 database health check and connects to `mysql-db` over the Compose network.
 MySQL data persists in the `mysql-data` named volume. Credentials in Compose
 initialize a new volume; changing environment values does not change accounts
-in an existing volume. Stop the services with `docker compose down`.
+in an existing volume. Stop the services with `docker compose down`, which keeps
+the volume. `docker compose down -v` deletes all database data; use it only for
+an intentional reset of a disposable environment.
 Compose supplies the application URL with the `mysql-db` service hostname;
-the localhost URL in `.env.example` is for direct local execution.
+it does not use the host's port 3307. For a directly launched Spring Boot process
+connecting to this Compose database, set
+`SPRING_DATASOURCE_URL=jdbc:mysql://localhost:3307/expense_tracker` (adjust the
+database name if customized). The default localhost:3306 URL is for a separate
+local MySQL server.
+
+The MySQL container has a health check; the Spring container does not declare
+one. Confirm MySQL is healthy, Spring is running, and `/` responds with 200.
+On a fresh volume, Spring logs should contain `Successfully applied 1 migration`
+and `Started ExpenseTrackerApplication`; on later starts, Flyway reports the
+schema is up to date. Open `http://localhost:8080/` for the frontend and
+`http://localhost:8080/swagger-ui.html` for Swagger.
 
 ### Generate JWT_SECRET in PowerShell
 
@@ -149,7 +165,7 @@ Only the JaCoCo Maven plugin was added; application dependencies are unchanged.
 
 GitHub Actions runs `./mvnw --batch-mode verify` with Temurin 25 and Maven cache
 for pushes and pull requests targeting `main`, then uploads the generated
-coverage directory. The workflow is at the **Git repository root**
+coverage directory. The workflow is at the **top level of the Git repository**
 (`../.github/workflows/ci.yml` relative to this Maven project). The job's working
 directory and cache path point to `expense-tracker-api`. Tests use the fake key
 in `application-test.properties`; no production GitHub secrets are required.
@@ -199,8 +215,10 @@ principal rather than a client-supplied owner ID.
 
 All money uses `BigDecimal` with exact two-decimal storage; values requiring
 rounding, non-positive amounts and values exceeding `DECIMAL(15,2)` are rejected.
-All list services require `Pageable`, cap pages at 100 rows and sort by descending
-ID for stable paging. Unpaged requests are rejected. HTTP endpoints are listed
+All list services require `Pageable` and cap pages at 100 rows. The default sort
+is descending ID; callers may choose the whitelisted fields documented below,
+with descending ID appended when needed to break ties. Unpaged requests are
+rejected. HTTP endpoints are listed
 below, together with the supported filters and pagination contract.
 
 Transaction/budget list and detail queries use
@@ -334,62 +352,64 @@ the prefix through the HTTP Bearer security scheme. Register/login have no Beare
 requirement. `/v3/api-docs` publishes the OpenAPI document, including query filters,
 request DTOs and the common error schema. Principal/userId is hidden from inputs.
 
-### PowerShell curl example
+### PowerShell HTTP example
 
-Use `curl.exe` rather than the Windows PowerShell `curl` alias. Set
-`DEMO_PASSWORD` in the current shell to your own password (at least 8 characters).
-Temporary UTF-8 JSON files preserve quotes and Unicode on Windows PowerShell;
-the last command deletes those payloads, which contain the demo credentials.
+Use `Invoke-RestMethod` so request bodies and the Bearer header stay in memory.
+The password prompt hides input; use 8 to 72 UTF-8 bytes for this example.
+Do not print the auth response, token, request bodies or password, and do not
+save them to files or shell transcripts. If using curl separately, call
+`curl.exe` explicitly because Windows PowerShell's `curl` alias is different.
 
 ```powershell
 $baseUrl = 'http://localhost:8080'
 $demoEmail = 'demo@example.invalid'
-
-function Write-JsonTemp($value) {
-    $file = [System.IO.Path]::GetTempFileName()
-    $encoding = [System.Text.UTF8Encoding]::new($false)
-    [System.IO.File]::WriteAllText($file, ($value | ConvertTo-Json -Compress -Depth 5), $encoding)
-    return $file
+$passwordPrompt = Read-Host 'Demo password' -AsSecureString
+$demoCredential = [pscredential]::new('demo', $passwordPrompt)
+$requestOptions = @{
+    ContentType = 'application/json; charset=utf-8'
+    ErrorAction = 'Stop'
 }
 
-$registrationFile = Write-JsonTemp @{
+$registrationBody = @{
     email = $demoEmail
-    password = $env:DEMO_PASSWORD
+    password = $demoCredential.GetNetworkCredential().Password
     displayName = 'Demo'
-}
-curl.exe -sS -X POST "$baseUrl/api/v1/auth/register" `
-    -H 'Content-Type: application/json' --data-binary "@$registrationFile" | Out-Null
+} | ConvertTo-Json -Compress
+Invoke-RestMethod -Method Post -Uri "$baseUrl/api/v1/auth/register" `
+    @requestOptions -Body $registrationBody | Out-Null
 
-$loginFile = Write-JsonTemp @{
+$loginBody = @{
     email = $demoEmail
-    password = $env:DEMO_PASSWORD
-}
-$auth = curl.exe -sS -X POST "$baseUrl/api/v1/auth/login" `
-    -H 'Content-Type: application/json' --data-binary "@$loginFile" | ConvertFrom-Json
-$authorization = "Authorization: Bearer $($auth.accessToken)"
+    password = $demoCredential.GetNetworkCredential().Password
+} | ConvertTo-Json -Compress
+$auth = Invoke-RestMethod -Method Post -Uri "$baseUrl/api/v1/auth/login" `
+    @requestOptions -Body $loginBody
+$authorization = @{ Authorization = 'Bearer ' + $auth.accessToken }
 
-$categoryFile = Write-JsonTemp @{
+$categoryBody = @{
     name = 'Food'
     type = 'CHI'
-}
-$category = curl.exe -sS -X POST "$baseUrl/api/v1/categories" `
-    -H $authorization -H 'Content-Type: application/json' --data-binary "@$categoryFile" | ConvertFrom-Json
+} | ConvertTo-Json -Compress
+$category = Invoke-RestMethod -Method Post -Uri "$baseUrl/api/v1/categories" `
+    @requestOptions -Headers $authorization -Body $categoryBody
 
-$transactionFile = Write-JsonTemp @{
+$transactionBody = @{
     categoryId = $category.id
-    amount = [decimal]'12.34'
-    occurredOn = '2026-11-08'
+    amount = '12.34'
+    occurredOn = [DateTime]::Today.ToString('yyyy-MM-dd')
     note = 'Lunch'
-}
-curl.exe -i -X POST "$baseUrl/api/v1/transactions" `
-    -H $authorization -H 'Content-Type: application/json' --data-binary "@$transactionFile"
+} | ConvertTo-Json -Compress
+Invoke-RestMethod -Method Post -Uri "$baseUrl/api/v1/transactions" `
+    @requestOptions -Headers $authorization -Body $transactionBody | Out-Null
 
-curl.exe -i --get "$baseUrl/api/v1/transactions/dashboard" -H $authorization `
-    --data-urlencode 'startDate=2026-11-01' --data-urlencode 'endDate=2026-11-30'
-curl.exe -i --get "$baseUrl/api/v1/transactions" -H $authorization `
-    --data-urlencode 'size=1000' --data-urlencode 'sort=id,desc'
+Invoke-RestMethod -Method Get -Uri "$baseUrl/api/v1/transactions/dashboard" `
+    -Headers $authorization -ErrorAction Stop
+Invoke-RestMethod -Method Get `
+    -Uri "$baseUrl/api/v1/transactions?size=1000&sort=id,desc" `
+    -Headers $authorization -ErrorAction Stop
 
-Remove-Item -LiteralPath $registrationFile, $loginFile, $categoryFile, $transactionFile
+$passwordPrompt.Dispose()
+Remove-Variable registrationBody, loginBody, auth, authorization, demoCredential
 ```
 
 ## Web frontend
